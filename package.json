@@ -1,12 +1,19 @@
 {
   "name": "isd-simple-git",
   "displayName": "ISD Simple Git",
-  "description": "Simple right-click Git helper: add, restore, stage hunks, show log, commit",
-  "version": "0.0.1",
+  "description": "Lightweight right-click Git helper: stage, unstage, stage selected lines, file log (popup), and commit.",
+  "version": "0.1.0",
+  "publisher": "isd",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.60.0"
   },
   "categories": ["Other"],
+  "keywords": ["git", "stage", "unstage", "commit"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/isd-simple-git"
+  },
   "activationEvents": [
     "onCommand:isd.git-tool"
   ],
@@ -18,45 +25,41 @@
         "title": "ISD: Git Tool"
       },
       {
-        "command": "git-add.addFile",
-        "title": "Git Add"
+        "command": "git-add.add",
+        "title": "ISD Git: Stage"
+      },
+      {
+        "command": "git-add.addForce",
+        "title": "ISD Git: Stage (Force)"
       },
       {
         "command": "git-add.unstage",
-        "title": "Git Unstage (Restore staged)"
-      },
-      {
-        "command": "git-add.stageSelection",
-        "title": "Git: Stage Selection (if supported)"
+        "title": "ISD Git: Unstage"
       },
       {
         "command": "git-add.stageSelectedLines",
-        "title": "Git: Stage Selected Lines"
-      },
-      {
-        "command": "git-add.stageHunks",
-        "title": "Git: Stage Hunks (patch-based)"
+        "title": "ISD Git: Stage Selected Lines"
       },
       {
         "command": "git-add.showLog",
-        "title": "Git: Show File Log"
+        "title": "ISD Git: File Log"
       },
       {
         "command": "git-add.commit",
-        "title": "Git: Commit (message)"
+        "title": "ISD Git: Commit -m"
       }
     ],
     "menus": {
       "explorer/context": [
         {
           "command": "isd.git-tool",
-          "group": "git"
+          "group": "git@99"
         }
       ],
       "editor/context": [
         {
           "command": "isd.git-tool",
-          "group": "git"
+          "group": "git@99"
         }
       ]
     }

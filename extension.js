@@ -1,466 +1,379 @@
+// isd-simple-git — VS Code extension
+// All git actions in one right-click menu entry: isd.git-tool
+'use strict';
+
 const vscode = require('vscode');
 const { execFile, spawn } = require('child_process');
 const path = require('path');
 
-function activate(context) {
-  const disposable = vscode.commands.registerCommand('git-add.addFile', async (uri, uris) => {
-    // Support multi-select in explorer (uris), or single file (uri), or active editor
-    const targets = uris && uris.length > 0
-      ? uris.map(u => u.fsPath)
-      : uri
-        ? [uri.fsPath]
-        : vscode.window.activeTextEditor
-          ? [vscode.window.activeTextEditor.document.uri.fsPath]
-          : [];
+// ─── helpers ────────────────────────────────────────────────────────────────
 
-    if (targets.length === 0) {
-      vscode.window.showErrorMessage('Git Add: No file selected.');
-      return;
-    }
+/** Resolve target file paths from context args or the active editor. */
+function resolveTargets(uri, uris) {
+  if (uris && uris.length > 0) return uris.map(u => u.fsPath);
+  if (uri) return [uri.fsPath];
+  const editor = vscode.window.activeTextEditor;
+  if (editor) return [editor.document.uri.fsPath];
+  return [];
+}
 
-    const fileList = targets.map(f => path.basename(f)).join(', ');
+/** Find the git repo root (cwd) from a file path. */
+function cwdOf(filePath) {
+  return path.dirname(filePath);
+}
 
-    const choice = await vscode.window.showQuickPick(
-      [
-        {
-          label: '$(add) Git Add',
-          description: 'git add',
-          detail: `Stage: ${fileList}`,
-          force: false
-        },
-        {
-          label: '$(warning) Git Add -f  (Force)',
-          description: 'git add -f',
-          detail: `Force stage (bypass .gitignore): ${fileList}`,
-          force: true
-        }
-      ],
-      {
-        title: `Git Add — ${targets.length} file(s) selected`,
-        placeHolder: 'Choose an action'
-      }
-    );
-
-    if (!choice) return; // user dismissed
-
-    const args = choice.force
-      ? ['add', '-f', ...targets]
-      : ['add', ...targets];
-
-    const cwd = path.dirname(targets[0]);
-
-    execFile('git', args, { cwd }, (error, _stdout, stderr) => {
-      if (error) {
-        vscode.window.showErrorMessage(`Git Add failed: ${stderr || error.message}`);
-        return;
-      }
-      const label = choice.force ? 'Git Added -f (Force)' : 'Git Added';
-      vscode.window.showInformationMessage(`${label}: ${fileList}`);
+/** Run a git command and return a promise with { stdout, stderr }. */
+function git(args, cwd) {
+  return new Promise((resolve, reject) => {
+    execFile('git', args, { cwd }, (err, stdout, stderr) => {
+      if (err) reject(new Error(stderr.trim() || err.message));
+      else resolve({ stdout, stderr });
     });
   });
+}
 
-  context.subscriptions.push(disposable);
-
-  // Stage current file (file-level)
-  const stageFile = vscode.commands.registerCommand('git-add.stageFile', (uri, uris) => {
-    const targets = uris && uris.length > 0
-      ? uris.map(u => u.fsPath)
-      : uri
-        ? [uri.fsPath]
-        : vscode.window.activeTextEditor
-          ? [vscode.window.activeTextEditor.document.uri.fsPath]
-          : [];
-
-    if (targets.length === 0) {
-      vscode.window.showErrorMessage('Git Add: No file selected.');
-      return;
-    }
-
-    const cwd = path.dirname(targets[0]);
-    execFile('git', ['add', ...targets], { cwd }, (error, _stdout, stderr) => {
-      if (error) {
-        vscode.window.showErrorMessage(`Git Add failed: ${stderr || error.message}`);
-        return;
-      }
-      const names = targets.map(f => path.basename(f)).join(', ');
-      vscode.window.showInformationMessage(`Git Added: ${names}`);
-    });
+/** Write stdin to a spawned process and return exit code. */
+function gitStdin(args, cwd, input) {
+  return new Promise(resolve => {
+    const cp = spawn('git', args, { cwd });
+    let errBuf = '';
+    cp.stderr.on('data', chunk => { errBuf += chunk; });
+    cp.stdin.end(input, 'utf8');
+    cp.on('close', code => resolve({ code, stderr: errBuf }));
   });
+}
 
-  // Unstage (git restore --staged)
-  const unstage = vscode.commands.registerCommand('git-add.unstage', (uri, uris) => {
-    const targets = uris && uris.length > 0
-      ? uris.map(u => u.fsPath)
-      : uri
-        ? [uri.fsPath]
-        : vscode.window.activeTextEditor
-          ? [vscode.window.activeTextEditor.document.uri.fsPath]
-          : [];
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+}
 
-    if (targets.length === 0) {
-      vscode.window.showErrorMessage('Git Unstage: No file selected.');
-      return;
-    }
+// ─── actions ────────────────────────────────────────────────────────────────
 
-    const cwd = path.dirname(targets[0]);
-    execFile('git', ['restore', '--staged', ...targets], { cwd }, (error, _stdout, stderr) => {
-      if (error) {
-        vscode.window.showErrorMessage(`Git Unstage failed: ${stderr || error.message}`);
-        return;
-      }
-      const names = targets.map(f => path.basename(f)).join(', ');
-      vscode.window.showInformationMessage(`Unstaged: ${names}`);
-    });
+async function doAdd(targets, force) {
+  const cwd = cwdOf(targets[0]);
+  const args = force ? ['add', '-f', ...targets] : ['add', ...targets];
+  await git(args, cwd);
+  const names = targets.map(f => path.basename(f)).join(', ');
+  vscode.window.showInformationMessage(`${force ? 'Force-' : ''}Staged: ${names}`);
+}
+
+async function doUnstage(targets) {
+  const cwd = cwdOf(targets[0]);
+  await git(['restore', '--staged', ...targets], cwd);
+  const names = targets.map(f => path.basename(f)).join(', ');
+  vscode.window.showInformationMessage(`Unstaged: ${names}`);
+}
+
+async function doCommit(cwd) {
+  const msg = await vscode.window.showInputBox({
+    prompt: 'Commit message',
+    placeHolder: 'feat: describe your change'
   });
+  if (!msg) return;
+  await git(['commit', '-m', msg], cwd);
+  vscode.window.showInformationMessage('Committed.');
+}
 
-  // Stage selection (delegates to built-in git if available)
-  const stageSelection = vscode.commands.registerCommand('git-add.stageSelection', async () => {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-      vscode.window.showErrorMessage('No active editor to stage selection from.');
-      return;
-    }
-    const selections = editor.selections.filter(s => !s.isEmpty);
-    if (selections.length === 0) {
-      vscode.window.showInformationMessage('Select a range first to stage.');
-      return;
-    }
-
-    // Try to call built-in git command to stage selected ranges
-    try {
-      // Many VS Code installations provide `git.stageSelectedRanges`
-      // Accepts (uri, ranges) in some versions; we'll attempt both patterns.
-      const uri = editor.document.uri;
-      // Try two invocation forms for compatibility
-      let ok = false;
-      try {
-        await vscode.commands.executeCommand('git.stageSelectedRanges', uri, selections);
-        ok = true;
-      } catch (e) {
-        try {
-          await vscode.commands.executeCommand('git.stageSelectedRanges', editor);
-          ok = true;
-        } catch (e2) {
-          ok = false;
-        }
-      }
-
-      if (!ok) {
-        vscode.window.showInformationMessage('Staging selected ranges is not supported by the built-in Git on this VS Code. Use Command Palette → "Git: Stage Selected Ranges" if available.');
-      }
-    } catch (err) {
-      vscode.window.showErrorMessage('Failed to stage selection: ' + (err && err.message ? err.message : String(err)));
-    }
-  });
-
-  // Stage hunks (patch-based) -- parse `git diff -U0` and apply only hunks overlapping selection
-  const stageHunks = vscode.commands.registerCommand('git-add.stageHunks', async () => {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-      vscode.window.showErrorMessage('No active editor to stage hunks from.');
-      return;
-    }
-    const document = editor.document;
-    const uri = document.uri;
-    const filePath = uri.fsPath;
-    const cwd = path.dirname(filePath);
-
-    // Compute selection line ranges (1-based for git diff headers)
-    const selections = editor.selections.filter(s => !s.isEmpty);
-    if (selections.length === 0) {
-      vscode.window.showInformationMessage('Select one or more ranges first to stage hunks.');
-      return;
-    }
-    // Merge selections into ranges
-    const ranges = selections.map(s => ({
-      start: s.start.line + 1,
-      end: s.end.line + 1
-    }));
-    ranges.sort((a, b) => a.start - b.start);
-    const merged = [];
-    for (const r of ranges) {
-      if (!merged.length) merged.push(r);
-      else {
-        const last = merged[merged.length - 1];
-        if (r.start <= last.end + 1) last.end = Math.max(last.end, r.end);
-        else merged.push(r);
-      }
-    }
-
-    // Get diff hunks with zero context
-    execFile('git', ['diff', '-U0', '--', filePath], { cwd }, (err, stdout, stderr) => {
-      if (err) {
-        vscode.window.showErrorMessage(`git diff failed: ${stderr || err.message}`);
-        return;
-      }
-      if (!stdout) {
-        vscode.window.showInformationMessage('No changes to stage for this file.');
-        return;
-      }
-
-      // Parse diff into header + hunks
-      const lines = stdout.split(/\r?\n/);
-      let headerLines = [];
-      const hunks = [];
-      let i = 0;
-      // collect header until first hunk @@
-      while (i < lines.length && !lines[i].startsWith('@@ ')) {
-        headerLines.push(lines[i]);
-        i++;
-      }
-
-      while (i < lines.length) {
-        if (!lines[i].startsWith('@@ ')) { i++; continue; }
-        const hunkHeader = lines[i];
-        const m = /@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(hunkHeader);
-        let newStart = 0, newCount = 0;
-        if (m) {
-          newStart = parseInt(m[1], 10);
-          newCount = m[2] ? parseInt(m[2], 10) : 1;
-        }
-        const hunkLines = [hunkHeader];
-        i++;
-        while (i < lines.length && !lines[i].startsWith('@@ ')) {
-          hunkLines.push(lines[i]);
-          i++;
-        }
-        hunks.push({ newStart, newCount, lines: hunkLines });
-      }
-
-      // select hunks overlapping merged ranges
-      const selectedHunks = hunks.filter(h => {
-        const hStart = h.newStart;
-        const hEnd = h.newStart + Math.max(0, h.newCount) - 1;
-        return merged.some(r => !(r.end < hStart || r.start > hEnd));
-      });
-
-      if (selectedHunks.length === 0) {
-        vscode.window.showInformationMessage('No diff hunks overlap your selection(s). Try expanding selection lines.');
-        return;
-      }
-
-      // Build patch: headerLines (up to +++ b/...) then selected hunks
-      const patchParts = [];
-      // include header lines but ensure file path lines exist
-      patchParts.push(...headerLines);
-      // append selected hunks
-      for (const h of selectedHunks) patchParts.push(...h.lines);
-      const patch = patchParts.join('\n') + '\n';
-
-      // apply patch to index with fallback strategies
-      const tryApply = async () => {
-        const variants = [ ['apply', '--cached', '-p0'], ['apply', '--cached', '-p1'], ['apply', '--cached', '--unidiff-zero'] ];
-        for (const args of variants) {
-          const cp = spawn('git', args, { cwd });
-          let stderrBuf = '';
-          cp.stdin.end(patch);
-          cp.stderr.on('data', chunk => { stderrBuf += chunk.toString(); });
-          const code = await new Promise(resolve => cp.on('close', resolve));
-          if (code === 0) return { ok: true };
-          // record last stderr
-          var lastErr = stderrBuf;
-        }
-        return { ok: false, stderr: lastErr };
-      };
-
-      tryApply().then(result => {
-        if (result.ok) {
-          vscode.window.showInformationMessage('Selected hunks staged.');
-          return;
-        }
-        // show detailed output to Output channel for debugging
-        const out = vscode.window.createOutputChannel('ISD Git');
-        out.clear();
-        out.appendLine('--- PATCH ---');
-        out.appendLine(patch);
-        out.appendLine('--- git apply stderr ---');
-        out.appendLine(result.stderr || 'no stderr');
-        out.show(true);
-        vscode.window.showErrorMessage('git apply --cached failed; see ISD Git output for details.');
-      });
-    });
-  });
-
-  // Stage selected lines (wrapper to stageHunks behaviour)
-  const stageSelectedLines = vscode.commands.registerCommand('git-add.stageSelectedLines', async () => {
-    // simply call stageHunks logic (it already uses line-based matching)
-    await vscode.commands.executeCommand('git-add.stageHunks');
-  });
-
-  context.subscriptions.push(stageHunks);
-
-  // Show file log (simple git log --oneline)
-  const showLog = vscode.commands.registerCommand('git-add.showLog', (uri, uris) => {
-    const targets = uris && uris.length > 0
-      ? uris.map(u => u.fsPath)
-      : uri
-        ? [uri.fsPath]
-        : vscode.window.activeTextEditor
-          ? [vscode.window.activeTextEditor.document.uri.fsPath]
-          : [];
-
-    if (targets.length === 0) {
-      vscode.window.showErrorMessage('Git Log: No file selected.');
-      return;
-    }
-
-    const file = targets[0];
-    const cwd = path.dirname(file);
-    execFile('git', ['log', '--oneline', '--', file], { cwd }, (error, stdout, stderr) => {
-      if (error) {
-        vscode.window.showErrorMessage(`Git Log failed: ${stderr || error.message}`);
-        return;
-      }
-      const items = stdout.split(/\r?\n/).filter(Boolean);
-      if (items.length === 0) {
-        vscode.window.showInformationMessage('No commits for this file.');
-        return;
-      }
-      vscode.window.showQuickPick(items, { placeHolder: 'Select commit to view' }).then(sel => {
-        if (!sel) return;
-        const sha = sel.split(' ')[0];
-        execFile('git', ['show', '--quiet', sha], { cwd }, (err2, full, stderr2) => {
-          if (err2) {
-            vscode.window.showErrorMessage(`git show failed: ${stderr2 || err2.message}`);
-            return;
-          }
-          // Show in a small webview panel with a close button
-          const panel = vscode.window.createWebviewPanel(
-            'gitLog',
-            `Git: ${path.basename(file)}@${sha}`,
-            vscode.ViewColumn.Active,
-            { enableScripts: true }
-          );
-
-          function escapeHtml(unsafe) {
-            return unsafe.replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-          }
-
-          panel.webview.html = `<!doctype html>
-            <html>
-            <head>
-              <meta charset="utf-8" />
-              <style>body{font-family:Consolas,monospace;padding:12px}button{position:fixed;right:12px;top:12px}</style>
-            </head>
-            <body>
-              <button id="close">Close ✕</button>
-              <pre>${escapeHtml(full)}</pre>
-              <script>
-                const vscode = acquireVsCodeApi();
-                document.getElementById('close').addEventListener('click', () => vscode.postMessage({command: 'close'}));
-              </script>
-            </body>
-            </html>`;
-
-          const disposer = panel.webview.onDidReceiveMessage(msg => {
-            if (msg && msg.command === 'close') {
-              panel.dispose();
-            }
-          });
-          panel.onDidDispose(() => disposer.dispose());
-        });
-      });
-    });
-  });
-
-  // Commit with message
-  const commitCmd = vscode.commands.registerCommand('git-add.commit', async (uri, uris) => {
-    const targets = (uris && uris.length > 0)
-      ? uris.map(u => u.fsPath)
-      : uri
-        ? [uri.fsPath]
-        : vscode.window.activeTextEditor
-          ? [vscode.window.activeTextEditor.document.uri.fsPath]
-          : [];
-
-    const cwd = targets.length > 0 ? path.dirname(targets[0]) : (vscode.workspace.rootPath || undefined);
-    const msg = await vscode.window.showInputBox({ prompt: 'Commit message (git commit -m)' });
-    if (!msg) return;
-    execFile('git', ['commit', '-m', msg], { cwd }, (err, _stdout, stderr) => {
-      if (err) {
-        vscode.window.showErrorMessage(`git commit failed: ${stderr || err.message}`);
-        return;
-      }
-      vscode.window.showInformationMessage('Committed.');
-    });
-  });
-
-  // Helper to normalize targets
-  function getTargets(uri, uris) {
-    return uris && uris.length > 0
-      ? uris.map(u => u.fsPath)
-      : uri
-        ? [uri.fsPath]
-        : vscode.window.activeTextEditor
-          ? [vscode.window.activeTextEditor.document.uri.fsPath]
-          : [];
+async function doShowLog(file) {
+  const cwd = cwdOf(file);
+  const { stdout } = await git(['log', '--oneline', '--', file], cwd);
+  const items = stdout.split(/\r?\n/).filter(Boolean);
+  if (items.length === 0) {
+    vscode.window.showInformationMessage('No commits found for this file.');
+    return;
   }
 
-  // Central command: isd.git-tool (single entry point)
-  const central = vscode.commands.registerCommand('isd.git-tool', async (uri, uris) => {
-    const targets = getTargets(uri, uris);
-    const fileList = targets.map(f => path.basename(f)).join(', ');
-    const choices = [
-      { label: '$(add) Git Add', id: 'add' },
-      { label: '$(warning) Git Add -f (Force)', id: 'addf' },
-      { label: '────────', id: 'sep1' },
-      { label: '$(files) Stage File', id: 'stageFile' },
-      { label: '$(arrow-left) Unstage (restore staged)', id: 'unstage' },
-      { label: '────────', id: 'sep2' },
-      { label: '$(diff) Stage Selected Lines (built-in)', id: 'stageSelection' },
-      { label: '$(list-unordered) Stage Selected Lines (line-based)', id: 'stageSelectedLines' },
-      { label: '$(list-unordered) Stage Hunks (patch-based)', id: 'stageHunks' },
-      { label: '────────', id: 'sep3' },
-      { label: '$(history) Show File Log', id: 'showLog' },
-      { label: '$(check) Commit -m', id: 'commit' }
-    ];
+  const sel = await vscode.window.showQuickPick(items, { placeHolder: 'Select a commit to inspect' });
+  if (!sel) return;
 
-    const pick = await vscode.window.showQuickPick(choices, { placeHolder: fileList ? `Targets: ${fileList}` : 'No file selected (will use active editor / workspace)' });
-    if (!pick) return;
+  const sha = sel.split(' ')[0];
+  const { stdout: detail } = await git(['show', sha], cwd);
 
-    switch (pick.id) {
-      case 'add':
-        await vscode.commands.executeCommand('git-add.addFile', uri, uris);
-        break;
-      case 'addf': {
-        const t = getTargets(uri, uris);
-        if (t.length === 0) { vscode.window.showErrorMessage('No file selected'); return; }
-        execFile('git', ['add', '-f', ...t], { cwd: path.dirname(t[0]) }, (err, _s, stderr) => {
-          if (err) { vscode.window.showErrorMessage(`Git Add -f failed: ${stderr || err.message}`); return; }
-          vscode.window.showInformationMessage(`Git Added -f: ${t.map(x => path.basename(x)).join(', ')}`);
-        });
-        break;
-      }
-      case 'stageFile':
-        await vscode.commands.executeCommand('git-add.stageFile', uri, uris);
-        break;
-      case 'unstage':
-        await vscode.commands.executeCommand('git-add.unstage', uri, uris);
-        break;
-      case 'stageSelection':
-        await vscode.commands.executeCommand('git-add.stageSelection');
-        break;
-      case 'stageSelectedLines':
-        await vscode.commands.executeCommand('git-add.stageSelectedLines');
-        break;
-      case 'stageHunks':
-        await vscode.commands.executeCommand('git-add.stageHunks');
-        break;
-      case 'sep1':
-      case 'sep2':
-      case 'sep3':
-        // separator - do nothing
-        break;
-      case 'showLog':
-        await vscode.commands.executeCommand('git-add.showLog', uri, uris);
-        break;
-      case 'commit':
-        await vscode.commands.executeCommand('git-add.commit', uri, uris);
-        break;
+  const panel = vscode.window.createWebviewPanel(
+    'isdGitLog',
+    `${path.basename(file)} @ ${sha.slice(0, 7)}`,
+    vscode.ViewColumn.Active,
+    { enableScripts: true, retainContextWhenHidden: false }
+  );
+
+  panel.webview.html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+  <style>
+    body { font-family: Consolas, 'Courier New', monospace; font-size: 13px; padding: 12px 16px; }
+    button { position: fixed; top: 10px; right: 14px; padding: 4px 12px; cursor: pointer; }
+    pre { white-space: pre-wrap; word-break: break-all; }
+    .add { color: #4caf50; }
+    .del { color: #f44336; }
+    .hdr { color: #2196f3; }
+  </style>
+</head>
+<body>
+  <button id="close">Close ✕</button>
+  <pre id="content">${escapeHtml(detail).replace(/^(\+[^+].*)$/mg, '<span class="add">$1</span>')
+                                         .replace(/^(-[^-].*)$/mg, '<span class="del">$1</span>')
+                                         .replace(/^(@@.*)$/mg, '<span class="hdr">$1</span>')}</pre>
+  <script>
+    const vscode = acquireVsCodeApi();
+    document.getElementById('close').addEventListener('click', () => vscode.postMessage({ command: 'close' }));
+  </script>
+</body>
+</html>`;
+
+  const sub = panel.webview.onDidReceiveMessage(msg => { if (msg.command === 'close') panel.dispose(); });
+  panel.onDidDispose(() => sub.dispose());
+}
+
+/**
+ * Stage only the lines overlapping the current editor selections.
+ * Strategy: use `git diff -U0`, trim each hunk to include ONLY the selected
+ * lines (+/- lines that fall within the selection), rebuild a minimal patch,
+ * and apply with `git apply --cached`.
+ */
+async function doStageSelectedLines() {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) { vscode.window.showErrorMessage('No active editor.'); return; }
+
+  const filePath = editor.document.uri.fsPath;
+  const cwd = cwdOf(filePath);
+
+  const sels = editor.selections.filter(s => !s.isEmpty);
+  if (sels.length === 0) {
+    vscode.window.showInformationMessage('Select one or more ranges first.');
+    return;
+  }
+
+  // Merge overlapping line ranges (1-based)
+  const merged = [];
+  for (const s of [...sels].sort((a, b) => a.start.line - b.start.line)) {
+    const r = { start: s.start.line + 1, end: s.end.line + 1 };
+    if (merged.length && r.start <= merged[merged.length - 1].end + 1) {
+      merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, r.end);
+    } else {
+      merged.push(r);
     }
-  });
+  }
 
-  context.subscriptions.push(stageFile, unstage, stageSelection, stageHunks, showLog, commitCmd, central);
+  // First: if the built-in git supports staging selected ranges, use it
+  try {
+    // Try two common invocation patterns
+    const uri = editor.document.uri;
+    let ok = false;
+    try { await vscode.commands.executeCommand('git.stageSelectedRanges', uri, editor.selections); ok = true; }
+    catch (e) {
+      try { await vscode.commands.executeCommand('git.stageSelectedRanges', editor); ok = true; }
+      catch (e2) { ok = false; }
+    }
+    if (ok) {
+      vscode.window.showInformationMessage('Used built-in Git to stage selected ranges.');
+      return;
+    }
+  } catch (_) {
+    // ignore and fall back to patch-based
+  }
+
+  let diffOut;
+  try {
+    const res = await git(['diff', '-U0', '--', filePath], cwd);
+    diffOut = res.stdout;
+  } catch (e) {
+    vscode.window.showErrorMessage('git diff failed: ' + e.message);
+    return;
+  }
+
+  if (!diffOut.trim()) {
+    vscode.window.showInformationMessage('No unstaged changes in this file.');
+    return;
+  }
+
+  // Parse into header + hunks
+  const rawLines = diffOut.split(/\r?\n/);
+  const header = [];
+  let i = 0;
+  while (i < rawLines.length && !rawLines[i].startsWith('@@ ')) header.push(rawLines[i++]);
+
+  const hunks = [];
+  while (i < rawLines.length) {
+    if (!rawLines[i].startsWith('@@ ')) { i++; continue; }
+    const hunkHeader = rawLines[i++];
+    const m = /@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(hunkHeader);
+    if (!m) continue;
+    const oldStart = parseInt(m[1]);
+    const oldCount = m[2] !== undefined ? parseInt(m[2]) : 1;
+    const newStart = parseInt(m[3]);
+    const newCount = m[4] !== undefined ? parseInt(m[4]) : 1;
+    const body = [];
+    while (i < rawLines.length && !rawLines[i].startsWith('@@ ')) body.push(rawLines[i++]);
+    hunks.push({ hunkHeader, oldStart, oldCount, newStart, newCount, body });
+  }
+
+  // For each hunk that overlaps a selection, trim its body to only selected + lines
+  const patchHunks = [];
+
+  for (const hunk of hunks) {
+    const hunkNewEnd = hunk.newStart + Math.max(0, hunk.newCount) - 1;
+    const overlaps = merged.some(r => !(r.end < hunk.newStart || r.start > hunkNewEnd));
+    if (!overlaps) continue;
+
+    // Walk body lines; track current new-side line number
+    let newLine = hunk.newStart;
+    const kept = [];
+    for (const bl of hunk.body) {
+      if (bl === '\\ No newline at end of file' || bl === '') { kept.push(bl); continue; }
+      const type = bl[0]; // '+', '-', ' '
+      if (type === '+') {
+        // only keep '+' lines that fall within a selected range
+        const inSel = merged.some(r => newLine >= r.start && newLine <= r.end);
+        if (inSel) kept.push(bl);
+        else kept.push(' ' + bl.slice(1)); // treat as context (unchanged)
+        newLine++;
+      } else if (type === '-') {
+        kept.push(bl);
+      } else {
+        kept.push(bl);
+        newLine++;
+      }
+    }
+
+    // Recount the hunk header based on kept lines
+    let newAdded = 0, newRemoved = 0, ctxLines = 0;
+    for (const bl of kept) {
+      if (!bl || bl === '\\ No newline at end of file') continue;
+      const ch = bl[0];
+      if (ch === '+') newAdded++;
+      else if (ch === '-') newRemoved++;
+      else if (ch === ' ') ctxLines++;
+    }
+    const oldCount = newRemoved + ctxLines;
+    const newCount = newAdded + ctxLines;
+    const newHeader = `@@ -${hunk.oldStart},${oldCount} +${hunk.newStart},${newCount} @@`;
+
+    patchHunks.push([newHeader, ...kept].join('\n'));
+  }
+
+  if (patchHunks.length === 0) {
+    vscode.window.showInformationMessage('No hunks overlap your selection. Select lines that contain changes (+/- lines).');
+    return;
+  }
+
+  // Calculate repo-relative path for patch header
+  let repoRoot = cwd;
+  try {
+    const r = await git(['rev-parse', '--show-toplevel'], cwd);
+    repoRoot = r.stdout.trim().replace(/\//g, path.sep);
+  } catch (_) { /* use cwd */ }
+
+  const relPath = path.relative(repoRoot, filePath).replace(/\\/g, '/');
+  const patch = [
+    `diff --git a/${relPath} b/${relPath}`,
+    `--- a/${relPath}`,
+    `+++ b/${relPath}`,
+    ...patchHunks,
+    ''
+  ].join('\n');
+
+  // apply with -p1 (default for unified diffs from git)
+  const result = await gitStdin(['apply', '--cached', '-p1'], repoRoot, patch);
+
+  if (result.code === 0) {
+    vscode.window.showInformationMessage('Selected lines staged.');
+    return;
+  }
+
+  // Show debug output
+  const out = vscode.window.createOutputChannel('ISD Git');
+  out.clear();
+  out.appendLine('=== PATCH SENT ===');
+  out.appendLine(patch);
+  out.appendLine('=== git apply stderr ===');
+  out.appendLine(result.stderr || '(empty)');
+  out.show(true);
+  vscode.window.showErrorMessage('git apply --cached failed — see "ISD Git" Output panel.');
+}
+
+// ─── activation ─────────────────────────────────────────────────────────────
+
+function activate(context) {
+
+  // Individual commands (also callable from Command Palette)
+  const cmds = [
+
+    vscode.commands.registerCommand('git-add.add', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doAdd(t, false).catch(e => vscode.window.showErrorMessage('Git Add failed: ' + e.message));
+    }),
+
+    vscode.commands.registerCommand('git-add.addForce', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doAdd(t, true).catch(e => vscode.window.showErrorMessage('Git Add -f failed: ' + e.message));
+    }),
+
+    vscode.commands.registerCommand('git-add.unstage', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doUnstage(t).catch(e => vscode.window.showErrorMessage('Git Unstage failed: ' + e.message));
+    }),
+
+    vscode.commands.registerCommand('git-add.stageSelectedLines', () => {
+      doStageSelectedLines().catch(e => vscode.window.showErrorMessage('Stage lines failed: ' + e.message));
+    }),
+
+    vscode.commands.registerCommand('git-add.showLog', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doShowLog(t[0]).catch(e => vscode.window.showErrorMessage('Git Log failed: ' + e.message));
+    }),
+
+    vscode.commands.registerCommand('git-add.commit', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      const cwd = t.length ? cwdOf(t[0]) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!cwd) { vscode.window.showErrorMessage('Cannot determine repository path.'); return; }
+      doCommit(cwd).catch(e => vscode.window.showErrorMessage('Git Commit failed: ' + e.message));
+    }),
+
+    // ── Central entry point shown in right-click menus ──────────────────────
+    vscode.commands.registerCommand('isd.git-tool', async (uri, uris) => {
+      const targets = resolveTargets(uri, uris);
+      const label = targets.map(f => path.basename(f)).join(', ') || '(active editor / workspace)';
+
+      // kind: 'sep' items are visual dividers; pick ignores them
+      const items = [
+        { label: 'Staging Actions',                 id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: '$(add) Stage',                    id: 'add',                kind: vscode.QuickPickItemKind.Default },
+        { label: '$(warning) Stage (Force)',        id: 'addForce',           kind: vscode.QuickPickItemKind.Default },
+        { label: '────────',                         id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: 'Other',                           id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: '$(arrow-left) Unstage',           id: 'unstage',            kind: vscode.QuickPickItemKind.Default },
+        { label: '$(diff) Stage Selected (builtin)',id: 'stageSelection',     kind: vscode.QuickPickItemKind.Default },
+        { label: '$(list-unordered) Stage Selected Lines (patch)', id: 'stageSelectedLines', kind: vscode.QuickPickItemKind.Default },
+        { label: '────────',                         id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: 'Info & Commit',                   id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: '$(history) File Log',             id: 'showLog',            kind: vscode.QuickPickItemKind.Default },
+        { label: '$(check) Commit -m',              id: 'commit',             kind: vscode.QuickPickItemKind.Default },
+      ];
+
+      const pick = await vscode.window.showQuickPick(items, {
+        title: 'ISD Git Tool',
+        placeHolder: label,
+      });
+      if (!pick || !pick.id) return;
+
+      switch (pick.id) {
+        case 'add':                await vscode.commands.executeCommand('git-add.add',                uri, uris); break;
+        case 'addForce':           await vscode.commands.executeCommand('git-add.addForce',           uri, uris); break;
+        case 'unstage':            await vscode.commands.executeCommand('git-add.unstage',            uri, uris); break;
+        case 'stageSelectedLines': await vscode.commands.executeCommand('git-add.stageSelectedLines'            ); break;
+        case 'showLog':            await vscode.commands.executeCommand('git-add.showLog',            uri, uris); break;
+        case 'commit':             await vscode.commands.executeCommand('git-add.commit',             uri, uris); break;
+      }
+    }),
+  ];
+
+  context.subscriptions.push(...cmds);
 }
 
 function deactivate() {}
