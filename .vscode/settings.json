@@ -1,0 +1,39 @@
+{
+    // =================================================================
+    // 執行與終端環境設定 (Execution & Terminal Environment)
+    // =================================================================
+
+    // 設定 Windows 終端的環境變數。
+    // 將當前工作目錄 (${workspaceFolder}) 加入 PYTHONPATH，
+    // 解決在終端機手動執行「python path/to/script.py」時，
+    // 常遇到的「ModuleNotFoundError: No module named 'src'」問題。
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "${workspaceFolder}"
+    },
+
+    // 讓 Python 終端在執行腳本時，自動切換路徑至該檔案所在的資料夾。
+    // 預設為 false（在專案根目錄執行）。開啟後可確保腳本內使用「相對路徑」讀取檔案時不會出錯。
+    "python.terminal.executeInFileDir": true,
+
+
+    // =================================================================
+    // 偵錯與開發工具設定 (Debugging & Development Tools)
+    // =================================================================
+
+    // 指定偵錯器（Debugger）載入環境變數定義檔的路徑。
+    // 常用於存放 API Keys、資料庫密碼等敏感資訊。
+    // 設定後，按下 F5 進入 Debug 模式時，程式會自動讀取 .env 內的變數。
+    "python.envFile": "${workspaceFolder}/.env",
+
+
+    // =================================================================
+    // 靜態分析與代碼補全 (Static Analysis & IntelliSense)
+    // =================================================================
+
+    // 告知 Pylance / Pyright 額外的模組搜尋路徑。
+    // 這是解決編輯器「出現紅色波浪紋（Import could not be resolved）」的關鍵設定。
+    // 確保「跳轉至定義 (Go to Definition)」與「自動補全」在自定義模組間能正常運作。
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}"
+    ]
+}
