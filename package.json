@@ -15,6 +15,23 @@
         "command": "git-add.addFile",
         "title": "Git Add"
       }
+      ,
+      {
+        "command": "git-add.stageFile",
+        "title": "Git Add (Stage File)"
+      },
+      {
+        "command": "git-add.unstage",
+        "title": "Git Unstage (Restore staged)"
+      },
+      {
+        "command": "git-add.stageSelection",
+        "title": "Git: Stage Selection (if supported)"
+      },
+      {
+        "command": "git-add.showLog",
+        "title": "Git: Show File Log"
+      }
     ],
     "menus": {
       "explorer/context": [
@@ -22,11 +39,33 @@
           "command": "git-add.addFile",
           "group": "git"
         }
+        ,
+        {
+          "command": "git-add.unstage",
+          "group": "git"
+        },
+        {
+          "command": "git-add.showLog",
+          "group": "navigation"
+        }
       ],
       "editor/context": [
         {
           "command": "git-add.addFile",
           "group": "git"
+        }
+        ,
+        {
+          "command": "git-add.stageSelection",
+          "group": "1_modification"
+        },
+        {
+          "command": "git-add.unstage",
+          "group": "git"
+        },
+        {
+          "command": "git-add.showLog",
+          "group": "navigation"
         }
       ]
     }

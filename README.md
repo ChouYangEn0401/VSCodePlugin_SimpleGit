@@ -103,5 +103,17 @@ Git Add/
 
 ---
 
+## 新增功能（已加入）
+
+- **Unstage**：在 Explorer 或 Editor 右鍵有 `Git Unstage`，會執行 `git restore --staged <file>`。
+- **Stage Selection（若支援）**：在編輯器選取範圍後右鍵可選 `Git: Stage Selection`，此功能會嘗試呼叫 VS Code 內建的 staged-range API（不同版本的 VS Code 可能支援不同的參數）。如果內建不支援，README 會指出使用 Command Palette 的方式。
+- **Show File Log**：在右鍵選單可選 `Git: Show File Log`，會列出該檔案的 commit 紀錄，並可選取查看完整 `git show` 輸出（會在 Output 面板顯示）。
+
+---
+
+如果要我把 `Stage Selection` 做成更高階的行為（像 Sourcetree 的逐行/逐段 stage），我可以改為產生 patch 並用 `git apply --cached` 來進行，需我實作請回覆「要」。
+
+---
+
 如果你要我把 README 再簡化成一頁快速指令卡（只保留三行指令），我可以立刻產出。 
 ```
