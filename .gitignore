@@ -1,0 +1,92 @@
+data/
+
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+.tox/
+.nox/
+.coverage
+.coverage.*
+.pytest_cache/
+htmlcov/
+coverage.xml
+
+# Virtual environments
+venv/
+ENV/
+env/
+.env/
+.venv/
+env.bak/
+venv.bak/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# PyCharm
+*.iml
+
+# Mypy
+.mypy_cache/
+
+# Playwright / browser artifacts
+.playwright/
+playwright-report/
+trace.zip
+ms-playwright/
+
+# Chrome/Chromium user data directories (if accidentally added)
+User Data/
+profile-*/
+
+# Project-specific generated data and logs
+outputs/
+cdp_logs/processed/
+cdp_logs/outputs/
+cdp_logs/*.jsonl
+cdp_logs/*.log
+*.log
+
+# Python bytecode in scripts
+scripts/*.pyc
+
+# Secret / env files
+.env
+.env.*
+
+# Misc
+*.pem
+*.key
+*.crt
+
