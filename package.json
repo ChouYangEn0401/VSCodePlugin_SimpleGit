@@ -1,0 +1,34 @@
+{
+  "name": "git-add",
+  "displayName": "Git Add",
+  "description": "Right-click any file to run git add",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["*"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "git-add.addFile",
+        "title": "Git Add"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "git-add.addFile",
+          "group": "git"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "git-add.addFile",
+          "group": "git"
+        }
+      ]
+    }
+  }
+}
