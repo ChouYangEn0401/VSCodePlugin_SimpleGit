@@ -1,24 +1,25 @@
 {
-  "name": "git-add",
-  "displayName": "Git Add",
-  "description": "Right-click any file to run git add",
+  "name": "isd-simple-git",
+  "displayName": "ISD Simple Git",
+  "description": "Simple right-click Git helper: add, restore, stage hunks, show log, commit",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.60.0"
   },
   "categories": ["Other"],
-  "activationEvents": ["*"],
+  "activationEvents": [
+    "onCommand:isd.git-tool"
+  ],
   "main": "./extension.js",
   "contributes": {
     "commands": [
       {
+        "command": "isd.git-tool",
+        "title": "ISD: Git Tool"
+      },
+      {
         "command": "git-add.addFile",
         "title": "Git Add"
-      }
-      ,
-      {
-        "command": "git-add.stageFile",
-        "title": "Git Add (Stage File)"
       },
       {
         "command": "git-add.unstage",
@@ -29,43 +30,33 @@
         "title": "Git: Stage Selection (if supported)"
       },
       {
+        "command": "git-add.stageSelectedLines",
+        "title": "Git: Stage Selected Lines"
+      },
+      {
+        "command": "git-add.stageHunks",
+        "title": "Git: Stage Hunks (patch-based)"
+      },
+      {
         "command": "git-add.showLog",
         "title": "Git: Show File Log"
+      },
+      {
+        "command": "git-add.commit",
+        "title": "Git: Commit (message)"
       }
     ],
     "menus": {
       "explorer/context": [
         {
-          "command": "git-add.addFile",
+          "command": "isd.git-tool",
           "group": "git"
-        }
-        ,
-        {
-          "command": "git-add.unstage",
-          "group": "git"
-        },
-        {
-          "command": "git-add.showLog",
-          "group": "navigation"
         }
       ],
       "editor/context": [
         {
-          "command": "git-add.addFile",
+          "command": "isd.git-tool",
           "group": "git"
-        }
-        ,
-        {
-          "command": "git-add.stageSelection",
-          "group": "1_modification"
-        },
-        {
-          "command": "git-add.unstage",
-          "group": "git"
-        },
-        {
-          "command": "git-add.showLog",
-          "group": "navigation"
         }
       ]
     }

@@ -1,86 +1,71 @@
-# Git Add — VS Code Extension
+# isd-simple-git
 
-在 VS Code 右鍵選單直接執行 `git add`，支援多選檔案與 force add（繞過 `.gitignore`）。
+Simple, lightweight VS Code helper to run common Git actions from the editor/explorer: add, force-add, unstage, stage hunks, view file log in a pop-up, and commit with a message.
 
 ---
 
 ## 安裝方式
 
-### 方法一：複製資料夾（免打包，最快）
+## Installation
 
-把整個專案資料夾複製到 VS Code extensions 目錄，**資料夾名稱必須含版本號**：
+There are two common ways to try or install this extension:
+
+1) Developer test (quick, per-workspace testing)
+
+- Open this project folder in VS Code and press F5 (or Run → Start Debugging). This launches an Extension Development Host where the extension is active for testing only.
+
+2) Install for your user (normal use)
+
+- Build a VSIX package (`vsce package`) or copy the extension folder to your user extensions directory:
 
 ```
-C:\Users\{你的使用者名稱}\.vscode\extensions\isd-git-add-0.0.1
+%USERPROFILE%\.vscode\extensions\isd-simple-git-0.0.1
 ```
 
-重啟 VS Code，即可生效。
+- Restart VS Code. Installing under the user extensions folder makes the extension available to that user across all workspaces.
 
-### 方法二：F5 開發模式測試
-
-1. 用 VS Code 開啟本專案資料夾
-2. 按 `F5`（或選單 Run → Start Debugging）
-3. 會跳出一個新的 **Extension Development Host** 視窗
-4. 在那個視窗裡測試功能，不需要任何安裝
-
-> 需要先安裝 Node.js，但**不需要** `npm install`，因為本擴充套件不依賴任何第三方套件。
+Note: VS Code does not provide a built-in "workspace-only" install for published extensions. Running via F5 (Extension Development Host) affects only your testing window. If you need a workspace-scoped workflow, include this extension in your repo and instruct teammates to run it via F5 or install the VSIX locally.
 
 ---
 
 ## 使用方式
 
-### 在左側 Explorer 右鍵
 
-1. 在左側檔案樹中，**單選或多選**（`Ctrl+Click` / `Shift+Click`）一個或多個檔案
-2. 右鍵 → 選 **Git Add**
-3. 跳出選單，選擇要執行的動作：
+## Usage
 
-| 選項 | 執行的指令 | 說明 |
-|------|-----------|------|
-| `Git Add` | `git add <files>` | 一般 stage |
-| `Git Add -f (Force)` | `git add -f <files>` | 強制 stage，可以將 `.gitignore` 內的檔案也加進去 |
+This extension exposes a single central command and menu entry: `ISD: Git Tool` (command id: `isd.git-tool`). It groups all actions in one place so you don't have many scattered menu items.
 
-4. 執行完成後右下角會出現通知訊息。
+- In Explorer: select one or more files (Ctrl+Click / Shift+Click), right-click → **ISD: Git Tool**.
+- In Editor: right-click inside the file → **ISD: Git Tool**.
 
-### 在編輯器內右鍵
+When invoked a small menu appears with the following actions:
 
-在目前開啟的檔案內容區右鍵，同樣可以看到 **Git Add**，對當前檔案執行。
-
----
-
-## 多選檔案
-
-在左側 Explorer：
-
-- `Ctrl + Click`：逐一加選
-- `Shift + Click`：範圍選取
-
-選好後右鍵 → **Git Add**，所有選取的檔案會一次傳入同一個 `git add` 指令。
+- `Git Add` — run `git add <files>`
+- `Git Add -f (Force)` — run `git add -f <files>` (bypass `.gitignore`)
+- `Stage File` — `git add` the current file
+- `Unstage (restore staged)` — `git restore --staged <file>`
+- `Stage Selection (built-in)` — delegates to VS Code builtin `git.stageSelectedRanges` if available
+- `Stage Hunks (patch-based)` — parses `git diff -U0` and stages only hunks overlapping your selection(s) using `git apply --cached` (Sourcetree-like behavior)
+- `Show File Log` — pick a commit and view `git show` in a small popup window; close with the X button when done
+- `Commit -m` — prompts for a commit message and runs `git commit -m "message"`
 
 ---
 
-## 關於 `git add -f`
 
-如果你的專案有 `.gitignore`，某些檔案（例如 `.env`、build 輸出等）會被忽略，直接 `git add` 會報錯：
+## Notes & tips
 
-```
-The following paths are ignored by one of your .gitignore files
-```
+- Multi-select files in Explorer (Ctrl+Click / Shift+Click) and open `ISD: Git Tool` to operate on them together.
+- `Stage Hunks` works by selecting ranges in the editor. It is line-based under the hood (git diffs are line-oriented). If you need character-level staging, that's not directly supported by git patches; the plugin approximates the Sourcetree behavior by staging hunks that overlap your selection.
+- `Show File Log` opens a small pop-up (webview panel) showing the full `git show` output. Close it using the X (Close) button in the panel.
 
-這時選 **Git Add -f (Force)** 即可強制 stage。
-
-> ⚠️ 請謹慎使用 force add，避免不小心 commit 敏感資料（如密碼、金鑰）。
-
----
-
-## 專案結構
+## Project structure
 
 ```
-Git Add/
-├── extension.js   # 擴充套件主程式
-├── package.json   # 擴充套件設定、選單宣告
-└── README.md      # 本說明文件
-
+isd-simple-git/
+├── extension.js   # extension implementation
+├── package.json   # extension manifest (commands + menus)
+└── README.md      # this file
+```
 ---
 
 ## 開發與 F5 測試
@@ -103,11 +88,8 @@ Git Add/
 
 ---
 
-## 新增功能（已加入）
 
-- **Unstage**：在 Explorer 或 Editor 右鍵有 `Git Unstage`，會執行 `git restore --staged <file>`。
-- **Stage Selection（若支援）**：在編輯器選取範圍後右鍵可選 `Git: Stage Selection`，此功能會嘗試呼叫 VS Code 內建的 staged-range API（不同版本的 VS Code 可能支援不同的參數）。如果內建不支援，README 會指出使用 Command Palette 的方式。
-- **Show File Log**：在右鍵選單可選 `Git: Show File Log`，會列出該檔案的 commit 紀錄，並可選取查看完整 `git show` 輸出（會在 Output 面板顯示）。
+If you'd like, I can produce a minimal VSIX and instructions to publish the extension on GitHub as a release artifact for easy installation.
 
 ---
 
