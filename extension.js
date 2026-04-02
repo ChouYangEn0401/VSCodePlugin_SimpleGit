@@ -74,6 +74,29 @@ async function doCommit(cwd) {
   vscode.window.showInformationMessage('Committed.');
 }
 
+async function doStashFile(targets) {
+  const cwd = cwdOf(targets[0]);
+  let repoRoot = cwd;
+  try {
+    const r = await git(['rev-parse', '--show-toplevel'], cwd);
+    repoRoot = r.stdout.trim().replace(/\//g, path.sep);
+  } catch (_) { /* use cwd */ }
+
+  const msg = await vscode.window.showInputBox({
+    prompt: 'Stash message (optional — press Enter to skip)',
+    placeHolder: 'WIP: describe the stash'
+  });
+  if (msg === undefined) return; // cancelled (Escape)
+
+  const args = ['stash', 'push'];
+  if (msg) args.push('-m', msg);
+  args.push('--', ...targets);
+
+  await git(args, repoRoot);
+  const names = targets.map(f => path.basename(f)).join(', ');
+  vscode.window.showInformationMessage(`Stashed: ${names}`);
+}
+
 async function doShowLog(file) {
   const cwd = cwdOf(file);
   const { stdout } = await git(['log', '--oneline', '--', file], cwd);
@@ -335,6 +358,12 @@ function activate(context) {
       doCommit(cwd).catch(e => vscode.window.showErrorMessage('Git Commit failed: ' + e.message));
     }),
 
+    vscode.commands.registerCommand('git-add.stashFile', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doStashFile(t).catch(e => vscode.window.showErrorMessage('Git Stash failed: ' + e.message));
+    }),
+
     // ── Central entry point shown in right-click menus ──────────────────────
     vscode.commands.registerCommand('isd.git-tool', async (uri, uris) => {
       const targets = resolveTargets(uri, uris);
@@ -342,19 +371,18 @@ function activate(context) {
 
       // kind: 'sep' items are visual dividers; pick ignores them
       const items = [
-        { label: 'Stage (files)',                   id: '',                   kind: vscode.QuickPickItemKind.Separator },
-        { label: '$(add) Stage',                    id: 'add',                kind: vscode.QuickPickItemKind.Default },
-        { label: '$(warning) Stage (Force)',        id: 'addForce',           kind: vscode.QuickPickItemKind.Default },
-        { label: '',                                id: '',                   kind: vscode.QuickPickItemKind.Separator },
-        { label: 'Selection (editor)',              id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: '$(add) Stage',                                   id: 'add',                kind: vscode.QuickPickItemKind.Default },
+        { label: '$(warning) Stage (Force)',                       id: 'addForce',           kind: vscode.QuickPickItemKind.Default },
+        { label: '─────────────────────────────────',             id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: '$(arrow-left) Unstage',                         id: 'unstage',            kind: vscode.QuickPickItemKind.Default },
+        { label: '─────────────────────────────────',             id: '',                   kind: vscode.QuickPickItemKind.Separator },
         { label: '$(list-unordered) Stage Selected Lines (patch)', id: 'stageSelectedLines', kind: vscode.QuickPickItemKind.Default },
-        { label: '',                                id: '',                   kind: vscode.QuickPickItemKind.Separator },
-        { label: 'Modify / Revert',                 id: '',                   kind: vscode.QuickPickItemKind.Separator },
-        { label: '$(arrow-left) Unstage',           id: 'unstage',            kind: vscode.QuickPickItemKind.Default },
-        { label: '',                                id: '',                   kind: vscode.QuickPickItemKind.Separator },
-        { label: 'Info & Commit',                   id: '',                   kind: vscode.QuickPickItemKind.Separator },
-        { label: '$(history) File Log',             id: 'showLog',            kind: vscode.QuickPickItemKind.Default },
-        { label: '$(check) Commit -m',              id: 'commit',             kind: vscode.QuickPickItemKind.Default },
+        { label: '─────────────────────────────────',             id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: '$(archive) Stash This File',                    id: 'stashFile',          kind: vscode.QuickPickItemKind.Default },
+        { label: '─────────────────────────────────',             id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: '$(history) File Log',                           id: 'showLog',            kind: vscode.QuickPickItemKind.Default },
+        { label: '─────────────────────────────────',             id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: '$(check) Commit -m',                            id: 'commit',             kind: vscode.QuickPickItemKind.Default },
       ];
 
       const pick = await vscode.window.showQuickPick(items, {
@@ -370,6 +398,7 @@ function activate(context) {
         case 'stageSelectedLines': await vscode.commands.executeCommand('git-add.stageSelectedLines'            ); break;
         case 'showLog':            await vscode.commands.executeCommand('git-add.showLog',            uri, uris); break;
         case 'commit':             await vscode.commands.executeCommand('git-add.commit',             uri, uris); break;
+        case 'stashFile':          await vscode.commands.executeCommand('git-add.stashFile',          uri, uris); break;
       }
     }),
   ];

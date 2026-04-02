@@ -47,6 +47,10 @@
       {
         "command": "git-add.commit",
         "title": "ISD Git: Commit -m"
+      },
+      {
+        "command": "git-add.stashFile",
+        "title": "ISD Git: Stash This File"
       }
     ],
     "menus": {
