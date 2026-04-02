@@ -3,7 +3,7 @@
   "displayName": "ISD Simple Git",
   "description": "Lightweight right-click Git helper: stage, unstage, stage selected lines, file log (popup), and commit.",
   "version": "0.1.0",
-  "publisher": "isd",
+  "publisher": "chouyangen",
   "license": "MIT",
   "engines": {
     "vscode": "^1.60.0"
@@ -12,7 +12,7 @@
   "keywords": ["git", "stage", "unstage", "commit"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/isd-simple-git"
+    "url": "https://github.com/ChouYangEn0401/VSCodePlugin_SimpleGit.git"
   },
   "activationEvents": [
     "onCommand:isd.git-tool"
