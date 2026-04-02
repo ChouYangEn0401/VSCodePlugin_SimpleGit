@@ -342,15 +342,16 @@ function activate(context) {
 
       // kind: 'sep' items are visual dividers; pick ignores them
       const items = [
-        { label: 'Staging Actions',                 id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: 'Stage (files)',                   id: '',                   kind: vscode.QuickPickItemKind.Separator },
         { label: '$(add) Stage',                    id: 'add',                kind: vscode.QuickPickItemKind.Default },
         { label: '$(warning) Stage (Force)',        id: 'addForce',           kind: vscode.QuickPickItemKind.Default },
-        { label: '────────',                         id: '',                   kind: vscode.QuickPickItemKind.Separator },
-        { label: 'Other',                           id: '',                   kind: vscode.QuickPickItemKind.Separator },
-        { label: '$(arrow-left) Unstage',           id: 'unstage',            kind: vscode.QuickPickItemKind.Default },
-        { label: '$(diff) Stage Selected (builtin)',id: 'stageSelection',     kind: vscode.QuickPickItemKind.Default },
+        { label: '',                                id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: 'Selection (editor)',              id: '',                   kind: vscode.QuickPickItemKind.Separator },
         { label: '$(list-unordered) Stage Selected Lines (patch)', id: 'stageSelectedLines', kind: vscode.QuickPickItemKind.Default },
-        { label: '────────',                         id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: '',                                id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: 'Modify / Revert',                 id: '',                   kind: vscode.QuickPickItemKind.Separator },
+        { label: '$(arrow-left) Unstage',           id: 'unstage',            kind: vscode.QuickPickItemKind.Default },
+        { label: '',                                id: '',                   kind: vscode.QuickPickItemKind.Separator },
         { label: 'Info & Commit',                   id: '',                   kind: vscode.QuickPickItemKind.Separator },
         { label: '$(history) File Log',             id: 'showLog',            kind: vscode.QuickPickItemKind.Default },
         { label: '$(check) Commit -m',              id: 'commit',             kind: vscode.QuickPickItemKind.Default },
