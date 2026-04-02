@@ -1,0 +1,71 @@
+{
+  "name": "isd-simple-git",
+  "displayName": "ISD Simple Git",
+  "description": "Lightweight right-click Git helper: stage, unstage, stage selected lines, file log (popup), and commit.",
+  "version": "0.1.0",
+  "publisher": "chouyangen",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["git", "stage", "unstage", "commit"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChouYangEn0401/VSCodePlugin_SimpleGit.git"
+  },
+  "activationEvents": [
+    "onCommand:isd.git-tool"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "isd.git-tool",
+        "title": "ISD: Git Tool"
+      },
+      {
+        "command": "git-add.add",
+        "title": "ISD Git: Stage"
+      },
+      {
+        "command": "git-add.addForce",
+        "title": "ISD Git: Stage (Force)"
+      },
+      {
+        "command": "git-add.unstage",
+        "title": "ISD Git: Unstage"
+      },
+      {
+        "command": "git-add.stageSelectedLines",
+        "title": "ISD Git: Stage Selected Lines"
+      },
+      {
+        "command": "git-add.showLog",
+        "title": "ISD Git: File Log"
+      },
+      {
+        "command": "git-add.commit",
+        "title": "ISD Git: Commit -m"
+      },
+      {
+        "command": "git-add.stashFile",
+        "title": "ISD Git: Stash This File"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "isd.git-tool",
+          "group": "git@99"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "isd.git-tool",
+          "group": "git@99"
+        }
+      ]
+    }
+  }
+}
