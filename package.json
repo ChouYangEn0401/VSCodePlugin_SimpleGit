@@ -51,6 +51,30 @@
       {
         "command": "git-add.stashFile",
         "title": "ISD Git: Stash This File"
+      },
+      {
+        "command": "isd.run-ps1",
+        "title": "ISD: Run PS1 (Windows)"
+      },
+      {
+        "command": "isd.run-cmd",
+        "title": "ISD: Run CMD (Windows)"
+      },
+      {
+        "command": "isd.run-sh",
+        "title": "ISD: Run SH (Linux/Mac)"
+      },
+      {
+        "command": "isd.run-ps1-admin",
+        "title": "ISD: Run PS1 as Admin (Windows)"
+      },
+      {
+        "command": "isd.run-cmd-admin",
+        "title": "ISD: Run CMD as Admin (Windows)"
+      },
+      {
+        "command": "isd.run-sh-sudo",
+        "title": "ISD: Run SH with sudo (Linux/Mac)"
       }
     ],
     "menus": {

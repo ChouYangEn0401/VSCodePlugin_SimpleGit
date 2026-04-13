@@ -316,6 +316,91 @@ async function doStageSelectedLines() {
   vscode.window.showErrorMessage('git apply --cached failed — see "ISD Git" Output panel.');
 }
 
+// ─── runner actions ─────────────────────────────────────────────────────────
+
+async function doRunPs1(filePath) {
+  const t = vscode.window.createTerminal({ name: `PS1: ${path.basename(filePath)}` });
+  t.show();
+  // announce and wait a short time so VS Code has time to initialise env
+  t.sendText(`echo 載入腳本中...`);
+  t.sendText(`Start-Sleep -Milliseconds 2500`);
+  // use explicit powershell invocation so user's shell profile isn't required
+  t.sendText(`powershell -NoExit -ExecutionPolicy Bypass -File "${filePath}"`);
+}
+
+async function doRunCmd(filePath) {
+  // Launch an integrated cmd.exe terminal so batch files run correctly
+  const t = vscode.window.createTerminal({ name: `CMD: ${path.basename(filePath)}`, shellPath: 'cmd.exe' });
+  t.show();
+  // echo + short wait to allow VS Code to finish initializing environment
+  t.sendText(`echo 載入腳本中...`);
+  t.sendText(`powershell -Command Start-Sleep -Milliseconds 2500`);
+  // use CALL so the batch file runs in the current cmd process
+  t.sendText(`call "${filePath}"`);
+}
+
+async function doRunSh(filePath) {
+  const t = vscode.window.createTerminal({ name: `SH: ${path.basename(filePath)}` });
+  t.show();
+  t.sendText(`echo 載入腳本中...`);
+  t.sendText(`sleep 2.5`);
+  t.sendText(`bash "${filePath}"`);
+}
+
+async function doRunPs1Admin(filePath) {
+  const pick = await vscode.window.showWarningMessage(
+    `以 Administrator 身分執行「${path.basename(filePath)}」會另外開一個視窗。要改在整合終端以一般權限執行，還是以管理員開新視窗？`,
+    { modal: true },
+    '在整合終端執行（一般權限）',
+    '以管理員模式開新視窗'
+  );
+  if (!pick) return;
+  if (pick === '在整合終端執行（一般權限）') {
+    return doRunPs1(filePath);
+  }
+  // Open elevated external PowerShell window (UAC) and set working directory
+  const safeFile = filePath.replace(/"/g, '""');
+  const wd = path.dirname(filePath).replace(/"/g, '""');
+  const cmd = `Start-Process powershell.exe -Verb RunAs -WorkingDirectory \"${wd}\" -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-File','\"${safeFile}\"'`;
+  execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', cmd], err => {
+    if (err) vscode.window.showErrorMessage('啟動管理員 PS1 失敗: ' + err.message);
+  });
+}
+
+async function doRunCmdAdmin(filePath) {
+  const pick = await vscode.window.showWarningMessage(
+    `以 Administrator 身分 (CMD) 執行「${path.basename(filePath)}」會另外開一個視窗。要改在整合終端以一般權限執行，還是以管理員開新視窗？`,
+    { modal: true },
+    '在整合終端執行（一般權限）',
+    '以管理員模式開新視窗'
+  );
+  if (!pick) return;
+  if (pick === '在整合終端執行（一般權限）') {
+    return doRunCmd(filePath);
+  }
+  // Start elevated cmd.exe with working directory set to the file's folder
+  const wd = path.dirname(filePath).replace(/"/g, '""');
+  const base = path.basename(filePath).replace(/"/g, '""');
+  const cmd = `Start-Process cmd.exe -Verb RunAs -WorkingDirectory \"${wd}\" -ArgumentList '/k','"${base}"'`;
+  execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', cmd], err => {
+    if (err) vscode.window.showErrorMessage('啟動管理員 CMD 失敗: ' + err.message);
+  });
+}
+
+async function doRunShSudo(filePath) {
+  const pick = await vscode.window.showWarningMessage(
+    `以 sudo 執行「${path.basename(filePath)}」？要在整合終端執行或用 sudo 執行？`,
+    { modal: true },
+    '在整合終端執行（一般權限）',
+    '以 sudo 執行'
+  );
+  if (!pick) return;
+  if (pick === '在整合終端執行（一般權限）') return doRunSh(filePath);
+  const t = vscode.window.createTerminal({ name: `SH (sudo): ${path.basename(filePath)}` });
+  t.show();
+  t.sendText(`sudo bash "${filePath}"`);
+}
+
 // ─── activation ─────────────────────────────────────────────────────────────
 
 function activate(context) {
@@ -364,6 +449,42 @@ function activate(context) {
       doStashFile(t).catch(e => vscode.window.showErrorMessage('Git Stash failed: ' + e.message));
     }),
 
+    vscode.commands.registerCommand('isd.run-ps1', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doRunPs1(t[0]).catch(e => vscode.window.showErrorMessage('Run PS1 failed: ' + e.message));
+    }),
+
+    vscode.commands.registerCommand('isd.run-cmd', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doRunCmd(t[0]).catch(e => vscode.window.showErrorMessage('Run CMD failed: ' + e.message));
+    }),
+
+    vscode.commands.registerCommand('isd.run-sh', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doRunSh(t[0]).catch(e => vscode.window.showErrorMessage('Run SH failed: ' + e.message));
+    }),
+
+    vscode.commands.registerCommand('isd.run-ps1-admin', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doRunPs1Admin(t[0]).catch(e => vscode.window.showErrorMessage('Run PS1 Admin failed: ' + e.message));
+    }),
+
+    vscode.commands.registerCommand('isd.run-cmd-admin', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doRunCmdAdmin(t[0]).catch(e => vscode.window.showErrorMessage('Run CMD Admin failed: ' + e.message));
+    }),
+
+    vscode.commands.registerCommand('isd.run-sh-sudo', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doRunShSudo(t[0]).catch(e => vscode.window.showErrorMessage('Run SH sudo failed: ' + e.message));
+    }),
+
     // ── Central entry point shown in right-click menus ──────────────────────
     vscode.commands.registerCommand('isd.git-tool', async (uri, uris) => {
       const targets = resolveTargets(uri, uris);
@@ -393,6 +514,14 @@ function activate(context) {
         { kind: vscode.QuickPickItemKind.Separator },
         { kind: vscode.QuickPickItemKind.Separator },
         { label: '$(check) Commit -m', id: 'commit' },
+        { kind: vscode.QuickPickItemKind.Separator, label: 'Script Runner' },
+        { label: '$(terminal-powershell) Run PS1  (Windows)',         description: 'PowerShell',   id: 'runPs1' },
+        { label: '$(terminal-cmd) Run CMD  (Windows)',                description: 'CMD',          id: 'runCmd' },
+        { label: '$(terminal-bash) Run SH  (Linux / Mac)',            description: 'Bash',         id: 'runSh' },
+        { kind: vscode.QuickPickItemKind.Separator, label: 'Script Runner — Elevated' },
+        { label: '$(shield) Run PS1 as Admin  (Windows)',             description: 'UAC 提示',    id: 'runPs1Admin' },
+        { label: '$(shield) Run CMD as Admin  (Windows)',             description: 'UAC 提示',    id: 'runCmdAdmin' },
+        { label: '$(shield) Run SH with sudo  (Linux / Mac)',         description: 'sudo 提示',   id: 'runShSudo' },
       ];
 
       const pick = await vscode.window.showQuickPick(items, {
@@ -409,6 +538,12 @@ function activate(context) {
         case 'showLog':            await vscode.commands.executeCommand('git-add.showLog',            uri, uris); break;
         case 'commit':             await vscode.commands.executeCommand('git-add.commit',             uri, uris); break;
         case 'stashFile':          await vscode.commands.executeCommand('git-add.stashFile',          uri, uris); break;
+        case 'runPs1':            await vscode.commands.executeCommand('isd.run-ps1',               uri, uris); break;
+        case 'runCmd':            await vscode.commands.executeCommand('isd.run-cmd',               uri, uris); break;
+        case 'runSh':             await vscode.commands.executeCommand('isd.run-sh',                uri, uris); break;
+        case 'runPs1Admin':       await vscode.commands.executeCommand('isd.run-ps1-admin',         uri, uris); break;
+        case 'runCmdAdmin':       await vscode.commands.executeCommand('isd.run-cmd-admin',         uri, uris); break;
+        case 'runShSudo':         await vscode.commands.executeCommand('isd.run-sh-sudo',           uri, uris); break;
       }
     }),
   ];
