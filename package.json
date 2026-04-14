@@ -53,6 +53,10 @@
         "title": "ISD Git: Stash This File"
       },
       {
+        "command": "git-add.untrackFile",
+        "title": "ISD Git: Untrack File from Commit"
+      },
+      {
         "command": "isd.run-ps1",
         "title": "ISD: Run PS1 (Windows)"
       },

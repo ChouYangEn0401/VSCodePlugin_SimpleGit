@@ -5,6 +5,7 @@
 const vscode = require('vscode');
 const { execFile, spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -95,6 +96,121 @@ async function doStashFile(targets) {
   await git(args, repoRoot);
   const names = targets.map(f => path.basename(f)).join(', ');
   vscode.window.showInformationMessage(`Stashed: ${names}`);
+}
+
+/**
+ * Create a new commit that restores <file> to its state just before a chosen
+ * bad commit, then write the original working-tree content back to disk so
+ * the user's local file is unchanged.
+ */
+async function doUntrackFile(targets) {
+  const filePath = targets[0];
+  const cwd = cwdOf(filePath);
+
+  // Resolve repo root
+  let repoRoot = cwd;
+  try {
+    const r = await git(['rev-parse', '--show-toplevel'], cwd);
+    repoRoot = r.stdout.trim().replace(/\//g, path.sep);
+  } catch (_) { /* use cwd */ }
+
+  const relPath = path.relative(repoRoot, filePath).replace(/\\/g, '/');
+
+  // Show commit log for this file so the user can pick the bad commit
+  const { stdout: logOut } = await git(['log', '--oneline', '--', relPath], repoRoot);
+  const items = logOut.split(/\r?\n/).filter(Boolean);
+  if (!items.length) {
+    vscode.window.showInformationMessage('No commits found for this file.');
+    return;
+  }
+
+  const sel = await vscode.window.showQuickPick(items, {
+    title: 'Untrack — Pick the Bad Commit',
+    placeHolder: 'Select the commit that introduced the unwanted change',
+  });
+  if (!sel) return;
+
+  const badSha = sel.split(' ')[0];
+
+  // The commit must have a parent (we restore to parent state)
+  let parentSha;
+  try {
+    const r = await git(['rev-parse', `${badSha}^`], repoRoot);
+    parentSha = r.stdout.trim();
+  } catch (_) {
+    vscode.window.showErrorMessage(`Commit ${badSha.slice(0, 7)} has no parent — cannot revert to a previous state.`);
+    return;
+  }
+
+  // Verify the file existed in the parent commit
+  try {
+    await git(['cat-file', '-e', `${parentSha}:${relPath}`], repoRoot);
+  } catch (_) {
+    vscode.window.showErrorMessage(`"${path.basename(filePath)}" did not exist before ${badSha.slice(0, 7)}.`);
+    return;
+  }
+
+  // Snapshot current working-tree content BEFORE we touch anything
+  let workingContent;
+  try {
+    workingContent = fs.readFileSync(filePath, 'utf8');
+  } catch (e) {
+    vscode.window.showErrorMessage('Cannot read current file: ' + e.message);
+    return;
+  }
+
+  // Ask for the commit message
+  const defaultMsg = `revert: untrack "${path.basename(filePath)}" changes from ${badSha.slice(0, 7)}`;
+  const msg = await vscode.window.showInputBox({
+    prompt: 'Commit message for the revert commit',
+    value: defaultMsg,
+  });
+  if (msg === undefined) return; // Escape = cancel
+
+  // Snapshot which OTHER files are currently staged so we can preserve them
+  const { stdout: statusOut } = await git(['status', '--porcelain'], repoRoot);
+  const otherStaged = statusOut.split(/\r?\n/)
+    .filter(Boolean)
+    .filter(line => line[0] !== ' ' && line[0] !== '?' && line.slice(3).split(' -> ').pop().trim() !== relPath)
+    .map(line => line.slice(3).split(' -> ').pop().trim());
+
+  // Restore the file to exactly its state in parentSha (also stages it)
+  try {
+    await git(['checkout', parentSha, '--', relPath], repoRoot);
+  } catch (e) {
+    vscode.window.showErrorMessage('Failed to restore pre-commit state: ' + e.message);
+    return;
+  }
+
+  // Temporarily unstage other files so this commit only touches our file
+  if (otherStaged.length) {
+    try { await git(['restore', '--staged', ...otherStaged], repoRoot); } catch (_) { /* best-effort */ }
+  }
+
+  // Commit
+  try {
+    await git(['commit', '-m', msg], repoRoot);
+  } catch (e) {
+    // Roll back: restore working file and re-stage others
+    fs.writeFileSync(filePath, workingContent, 'utf8');
+    if (otherStaged.length) {
+      try { await git(['add', ...otherStaged], repoRoot); } catch (_) {}
+    }
+    vscode.window.showErrorMessage('git commit failed: ' + e.message);
+    return;
+  }
+
+  // Re-stage any files that were staged before we started
+  if (otherStaged.length) {
+    try { await git(['add', ...otherStaged], repoRoot); } catch (_) { /* best-effort */ }
+  }
+
+  // Finally, write the original working-tree content back — user's file is untouched
+  fs.writeFileSync(filePath, workingContent, 'utf8');
+
+  vscode.window.showInformationMessage(
+    `Done! Reverted "${path.basename(filePath)}" changes from ${badSha.slice(0, 7)} in a new commit. Your working file is unchanged.`
+  );
 }
 
 async function doShowLog(file) {
@@ -449,6 +565,12 @@ function activate(context) {
       doStashFile(t).catch(e => vscode.window.showErrorMessage('Git Stash failed: ' + e.message));
     }),
 
+    vscode.commands.registerCommand('git-add.untrackFile', (uri, uris) => {
+      const t = resolveTargets(uri, uris);
+      if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
+      doUntrackFile(t).catch(e => vscode.window.showErrorMessage('Untrack File failed: ' + e.message));
+    }),
+
     vscode.commands.registerCommand('isd.run-ps1', (uri, uris) => {
       const t = resolveTargets(uri, uris);
       if (!t.length) { vscode.window.showErrorMessage('No file selected.'); return; }
@@ -513,6 +635,10 @@ function activate(context) {
         { kind: vscode.QuickPickItemKind.Separator },
         { kind: vscode.QuickPickItemKind.Separator },
         { kind: vscode.QuickPickItemKind.Separator },
+        { label: '$(discard) Untrack File from Commit…', description: 'New commit reverts a file; working copy preserved', id: 'untrackFile' },
+        { kind: vscode.QuickPickItemKind.Separator },
+        { kind: vscode.QuickPickItemKind.Separator },
+        { kind: vscode.QuickPickItemKind.Separator },
         { label: '$(check) Commit -m', id: 'commit' },
         { kind: vscode.QuickPickItemKind.Separator, label: 'Script Runner' },
         { label: '$(terminal-powershell) Run PS1  (Windows)',         description: 'PowerShell',   id: 'runPs1' },
@@ -538,6 +664,7 @@ function activate(context) {
         case 'showLog':            await vscode.commands.executeCommand('git-add.showLog',            uri, uris); break;
         case 'commit':             await vscode.commands.executeCommand('git-add.commit',             uri, uris); break;
         case 'stashFile':          await vscode.commands.executeCommand('git-add.stashFile',          uri, uris); break;
+        case 'untrackFile':        await vscode.commands.executeCommand('git-add.untrackFile',        uri, uris); break;
         case 'runPs1':            await vscode.commands.executeCommand('isd.run-ps1',               uri, uris); break;
         case 'runCmd':            await vscode.commands.executeCommand('isd.run-cmd',               uri, uris); break;
         case 'runSh':             await vscode.commands.executeCommand('isd.run-sh',                uri, uris); break;
