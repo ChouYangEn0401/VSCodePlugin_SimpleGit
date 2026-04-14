@@ -1,58 +1,74 @@
-# isd-simple-git
+# ISD Simple Git
 
-Lightweight VS Code helper that adds a single **ISD: Git Tool** entry to the Explorer and Editor right-click menus. Quick access to: stage, force-stage, unstage, stage selected lines, view file log, stash file, and commit.
+> Lightweight VS Code extension that adds a single **ISD: Git Tool** entry to the Explorer and Editor right-click menus — keeping your context menu clean while giving you instant access to the most common Git and script-runner operations.
 
-## Quick features
-| Action | Description |
-|---|---|
-| **Stage** | `git add <files>` — stage one or many files |
-| **Stage (Force)** | `git add -f <files>` — bypass `.gitignore` |
-| **Unstage** | `git restore --staged <files>` |
-| **Stage Selected Lines** | Stage only the lines you highlighted (patch-based, no third-party deps) |
-| **File Log** | Browse commit history for a file; click a commit to view a syntax-highlighted diff popup |
-| **Commit -m** | Type a commit message and commit in one step |
+![All Features](docs/AllFeatures.png)
 
-All actions are grouped behind a single right-click entry **ISD: Git Tool** to keep the menu clean.
+---
+| **Run SH with sudo** | Linux / Mac | Bash with `sudo` |
+
+## Installation
+
+This README documents features and usage for Git users. Development and publishing instructions have been moved to the developer notes file `dev.md`.
+
+For quick development/testing, see **Developer Setup** below.
+
+
+---
 
 ## Requirements
-- VS Code 1.60+
-- `git` on PATH
 
-## Install (for sharing)
-1) Package to VSIX (local share):
+- VS Code **1.60+**
+- `git` available on `PATH`
+
+---
+
+## Installation
+
+### From VSIX (local / sharing)
+
+1. Package the extension:
 
 ```bash
 npx @vscode/vsce package
-# produces isd-simple-git-0.1.0.vsix
+# → isd-simple-git-0.1.0.vsix
 ```
 
-2) Install the VSIX locally or send the file to others:
+2. Install the VSIX:
 
 ```bash
-# install locally
 code --install-extension isd-simple-git-0.1.0.vsix
 ```
+---
 
-3) (Optional) Publish to Marketplace: set a valid `publisher` in `package.json`, create a Publisher on the VS Code Marketplace, then run:
+## Usage
 
-```bash
-npm install -g @vscode/vsce
-vsce login <publisher>
-vsce publish
-# or: npx @vscode/vsce publish
-```
+1. Right-click any file in the **Explorer** or **Editor** tab.
+2. Select **ISD: Git Tool** — a quick-pick menu appears with all available actions for that file.
+3. Choose an action.
 
-Note: publishing requires a registered publisher and Personal Access Token.
+For **Stage Selected Lines**, first highlight the lines you want in the editor, then open **ISD: Git Tool** → **Stage Selected Lines (patch)**.
 
-## Developer / Test
-1. Open the folder in VS Code.
-2. Press F5 (Run Extension) to open an Extension Development Host window.
-3. Right-click a file in Explorer or editor → **ISD: Git Tool** and try commands.
+---
 
-## Files
-- `package.json` — extension manifest (commands, menus)
-- `extension.js` — implementation
-- `README.md` — this file
+## Developer Setup
+
+1. Open this folder in VS Code.
+2. Press `F5` → an **Extension Development Host** window opens.
+3. Right-click any file → **ISD: Git Tool** to test commands.
+
+---
+
+## Project Structure
+
+| File | Purpose |
+|---|---|
+| `extension.js` | Full extension implementation |
+| `package.json` | Extension manifest (commands, menus, metadata) |
+| `docs/AllFeatures.png` | Screenshot used in this README |
+
+---
 
 ## License
-MIT
+
+[MIT](LICENSE.txt)
