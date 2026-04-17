@@ -2,7 +2,7 @@
   "name": "isd-simple-git",
   "displayName": "ISD Simple Git",
   "description": "Lightweight right-click Git helper: stage, unstage, stage selected lines, file log (popup), and commit.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "chouyangen",
   "license": "MIT",
   "engines": {
